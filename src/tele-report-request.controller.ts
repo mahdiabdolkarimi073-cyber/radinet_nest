@@ -37,6 +37,7 @@ class CheckPatientDto {
 }
 
 class CreateTeleReportRequestDto {
+  @IsOptional() @IsString() requestNumber?: string;
   @IsString() @Length(2, 80) country!: string;
   @IsString() @Length(2, 40) language!: string;
   @IsString() @Length(2, 80) patientFirstName!: string;
@@ -112,11 +113,11 @@ export class TeleReportRequestController {
         where: { idempotencyKey: body.idempotencyKey.trim() },
       });
       if (existing) {
-        return { requestNumber: existing.requestNumber, status: existing.status, createdAt: existing.createdAt };
+        return { id: existing.id, requestNumber: existing.requestNumber, status: existing.status, createdAt: existing.createdAt };
       }
     }
 
-    const requestNumber = `TR-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 6).toUpperCase()}`;
+    const requestNumber = body.requestNumber?.trim() || `TR-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 6).toUpperCase()}`;
     const request = await this.prisma.teleReportRequest.create({
       data: {
         requestNumber,
@@ -153,7 +154,7 @@ export class TeleReportRequestController {
       include: { attachments: true },
     });
 
-    return { requestNumber: request.requestNumber, status: request.status, createdAt: request.createdAt };
+    return { id: request.id, requestNumber: request.requestNumber, status: request.status, createdAt: request.createdAt };
   }
 
   @Get(':requestNumber')

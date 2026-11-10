@@ -497,10 +497,11 @@ export class AdminDoctorController {
       });
       // 5. Delete doctor profile
       await tx.doctorProfile.delete({ where: { id: doctor.id } });
-      // 6. Delete user or deactivate safely
-      await tx.user.delete({ where: { id: doctor.userId } }).catch(async () => {
-        await tx.user.update({ where: { id: doctor.userId }, data: { status: 'inactive' } }).catch(() => {});
-      });
+      // 6. Demote user role or keep user account intact - DO NOT DELETE USER
+      await tx.user.update({
+        where: { id: doctor.userId },
+        data: { role: 'user' },
+      }).catch(() => {});
     });
 
     return { ok: true, message: 'پزشک رادیولوژیست با موفقیت حذف شد' };

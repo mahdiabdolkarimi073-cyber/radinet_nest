@@ -55,6 +55,8 @@ class CreateUserDto {
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsString() organizationId?: string;
   @IsOptional() @IsString() imagingCenterId?: string;
+  @IsOptional() @IsString() specialty?: string;
+  @IsOptional() @IsString() subSpecialty?: string;
 }
 
 class UpdateUserDto {
@@ -332,20 +334,24 @@ export class AdminUserController {
     });
 
     if (dto.role === 'radiologist' || dto.role === 'doctor') {
+      const specialty = dto.specialty?.trim() || 'متخصص رادیولوژی و تله‌ریپورت';
+      const subSpecialty = dto.subSpecialty?.trim() || 'تله‌رادیولوژی بالینی';
       await this.prisma.doctorProfile.upsert({
         where: { userId: user.id },
         create: {
           userId: user.id,
           fullName: user.fullName,
           email: user.email,
-          specialty: 'متخصص رادیولوژی',
-          subSpecialty: 'تله‌رادیولوژی',
+          specialty,
+          subSpecialty,
           isActive: true,
           collaborationStatus: 'approved',
         },
         update: {
           fullName: user.fullName,
           email: user.email,
+          specialty,
+          subSpecialty,
           isActive: true,
           collaborationStatus: 'approved',
         },

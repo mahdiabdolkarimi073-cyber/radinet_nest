@@ -40,6 +40,10 @@ class TeleReportQueryDto {
 
 class AssignDoctorDto {
   @IsString() doctorId!: string;
+  @IsOptional() @IsString() requestNumber?: string;
+  @IsOptional() @IsString() localId?: string;
+  @IsOptional() @IsString() phone?: string;
+  @IsOptional() @IsString() patientLastName?: string;
 }
 
 class CreateTariffDto {
@@ -141,13 +145,23 @@ export class AdminTeleReportController {
   async getRequest(@Headers('authorization') auth: string, @Param('id') id: string) {
     verifyAdmin(auth);
 
-    const request = await this.prisma.teleReportRequest.findUnique({
-      where: { id },
+    const isUuid = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+    const cleanId = String(id || '').trim();
+    const request = await this.prisma.teleReportRequest.findFirst({
+      where: isUuid(cleanId)
+        ? { OR: [{ id: cleanId }, { requestNumber: cleanId }] }
+        : {
+            OR: [
+              { requestNumber: cleanId },
+              { requestNumber: { equals: cleanId, mode: 'insensitive' } },
+              { requestNumber: { contains: cleanId, mode: 'insensitive' } },
+            ],
+          },
       include: {
         attachments: true,
         reports: {
           include: {
-            author: { select: { id: true, fullName: true } },
+            author: { select: { id: true, fullName: true, email: true } },
             images: true,
           },
         },
@@ -172,30 +186,64 @@ export class AdminTeleReportController {
     verifyAdmin(auth);
 
     const isUuid = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
-    const request = await this.prisma.teleReportRequest.findFirst({
-      where: isUuid(id)
-        ? { OR: [{ id }, { requestNumber: id }] }
-        : { requestNumber: id },
+    const cleanId = String(id || '').trim();
+    const reqNum = String(dto.requestNumber || '').trim();
+    const localId = String(dto.localId || '').trim();
+
+    const whereOr: Prisma.TeleReportRequestWhereInput[] = [];
+    if (isUuid(cleanId)) whereOr.push({ id: cleanId });
+    if (cleanId) {
+      whereOr.push(
+        { requestNumber: cleanId },
+        { requestNumber: { equals: cleanId, mode: 'insensitive' } },
+        { requestNumber: { contains: cleanId, mode: 'insensitive' } },
+      );
+    }
+    if (reqNum && reqNum !== cleanId) {
+      if (isUuid(reqNum)) whereOr.push({ id: reqNum });
+      whereOr.push(
+        { requestNumber: reqNum },
+        { requestNumber: { equals: reqNum, mode: 'insensitive' } },
+      );
+    }
+    if (localId && localId !== cleanId && localId !== reqNum) {
+      if (isUuid(localId)) whereOr.push({ id: localId });
+      whereOr.push({ requestNumber: localId });
+    }
+
+    let request = await this.prisma.teleReportRequest.findFirst({
+      where: { OR: whereOr },
     });
+
+    if (!request && (dto.phone || dto.patientLastName)) {
+      request = await this.prisma.teleReportRequest.findFirst({
+        where: {
+          ...(dto.phone ? { phone: dto.phone.trim() } : {}),
+          ...(dto.patientLastName ? { patientLastName: { contains: dto.patientLastName.trim(), mode: 'insensitive' } } : {}),
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
     if (!request) throw new NotFoundException('درخواست یافت نشد');
 
     const rawId = String(dto.doctorId || '').trim();
-    const cleanId = rawId.startsWith('doc-') ? rawId.replace('doc-', '') : rawId;
+    const cleanDocId = rawId.startsWith('doc-') ? rawId.replace('doc-', '') : rawId;
 
     // Safely query DoctorProfile without crashing on non-UUID strings
     const profileOr: Prisma.DoctorProfileWhereInput[] = [];
     if (isUuid(rawId)) profileOr.push({ id: rawId }, { userId: rawId });
-    if (isUuid(cleanId) && cleanId !== rawId) profileOr.push({ id: cleanId }, { userId: cleanId });
+    if (isUuid(cleanDocId) && cleanDocId !== rawId) profileOr.push({ id: cleanDocId }, { userId: cleanDocId });
     if (rawId) {
       profileOr.push(
         { email: { equals: rawId, mode: 'insensitive' } },
         { fullName: { equals: rawId, mode: 'insensitive' } }
       );
     }
-    if (cleanId && cleanId !== rawId) {
+    if (cleanDocId && cleanDocId !== rawId) {
       profileOr.push(
-        { email: { equals: cleanId, mode: 'insensitive' } },
-        { fullName: { equals: cleanId, mode: 'insensitive' } }
+        { email: { equals: cleanDocId, mode: 'insensitive' } },
+        { fullName: { equals: cleanDocId, mode: 'insensitive' } }
       );
     }
 
@@ -209,17 +257,17 @@ export class AdminTeleReportController {
     if (!doctor) {
       const userOr: Prisma.UserWhereInput[] = [];
       if (isUuid(rawId)) userOr.push({ id: rawId });
-      if (isUuid(cleanId) && cleanId !== rawId) userOr.push({ id: cleanId });
+      if (isUuid(cleanDocId) && cleanDocId !== rawId) userOr.push({ id: cleanDocId });
       if (rawId) {
         userOr.push(
           { email: { equals: rawId, mode: 'insensitive' } },
           { fullName: { equals: rawId, mode: 'insensitive' } }
         );
       }
-      if (cleanId && cleanId !== rawId) {
+      if (cleanDocId && cleanDocId !== rawId) {
         userOr.push(
-          { email: { equals: cleanId, mode: 'insensitive' } },
-          { fullName: { equals: cleanId, mode: 'insensitive' } }
+          { email: { equals: cleanDocId, mode: 'insensitive' } },
+          { fullName: { equals: cleanDocId, mode: 'insensitive' } }
         );
       }
 
@@ -283,7 +331,11 @@ export class AdminTeleReportController {
 
     await this.prisma.teleReportRequest.update({
       where: { id: request.id },
-      data: { status: 'assigned', assignedDoctorId: doctorUserId },
+      data: {
+        status: 'assigned',
+        assignedDoctorId: doctor.id,
+        referredAt: new Date(),
+      },
     });
 
     return report;
