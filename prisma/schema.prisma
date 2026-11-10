@@ -1,0 +1,1139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+
+model HomeSlide {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title String
+  subtitle String
+  description String @default("")
+  imageUrl String @map("image_url")
+  primaryCta String @default("خدمات ما") @map("primary_cta")
+  secondaryCta String @default("درباره ما") @map("secondary_cta")
+  displayOrder Int @default(0) @map("display_order")
+  isPublished Boolean @default(true) @map("is_published")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@map("home_slides")
+}
+
+model HomeService {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name String
+  description String @default("")
+  iconKey String @default("services") @map("icon_key")
+  colorTheme String @default("blue") @map("color_theme")
+  ctaLabel String @default("مشاهده خدمات") @map("cta_label")
+  displayOrder Int @default(0) @map("display_order")
+  isPublished Boolean @default(true) @map("is_published")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@map("home_services")
+}
+
+model HomeStat {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  label String
+  value String
+  iconKey String @default("activity") @map("icon_key")
+  displayOrder Int @default(0) @map("display_order")
+  isPublished Boolean @default(true) @map("is_published")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@map("home_stats")
+}
+
+model HomeNews {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title String
+  dateLabel String @map("date_label")
+  imageUrl String @map("image_url")
+  displayOrder Int @default(0) @map("display_order")
+  isPublished Boolean @default(true) @map("is_published")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@map("home_news")
+}
+
+model Article {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title String
+  slug String @unique
+  summary String @db.Text
+  content String @db.Text
+  imageUrl String @default("") @map("image_url")
+  category String @default("عمومی")
+  author String @default("تیم تحریریه رادینت")
+  isPublished Boolean @default(true) @map("is_published")
+  publishedAt DateTime? @default(now()) @map("published_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([isPublished, publishedAt])
+  @@index([slug])
+  @@map("articles")
+}
+
+model SiteSetting {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  settingKey String @unique @map("setting_key")
+  settingValue Json @default("{}") @map("setting_value")
+  updatedAt DateTime @default(now()) @map("updated_at")
+  @@map("site_settings")
+}
+
+model AboutContent {
+  id String @id @default(uuid()) @db.Uuid
+  key String @unique
+  title String
+  body String @db.Text
+  isActive Boolean @default(true) @map("is_active")
+  displayOrder Int @default(0) @map("display_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("about_content")
+}
+
+model AboutMedia {
+  id String @id @default(uuid()) @db.Uuid
+  kind String
+  title String
+  imageUrl String @map("image_url")
+  displayOrder Int @default(0) @map("display_order")
+  isActive Boolean @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@index([kind, displayOrder])
+  @@map("about_media")
+}
+
+model Certificate {
+  id String @id @default(uuid()) @db.Uuid
+  title String
+  imageUrl String @map("image_url")
+  fileUrl String? @map("file_url")
+  description String? @default("") @db.Text
+  displayOrder Int @default(0) @map("display_order")
+  isActive Boolean @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@map("certificates")
+}
+
+model ConsultationRequest {
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  phone String
+  email String?
+  message String? @db.Text
+  status String @default("new")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([status, createdAt])
+  @@map("consultation_requests")
+}
+
+model ContactMessage {
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  email String
+  phone String
+  subject String
+  message String @db.Text
+  status String @default("new")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([status, createdAt])
+  @@map("contact_messages")
+}
+
+model ContactPageContent {
+  id String @id @default(uuid()) @db.Uuid
+  heroTitle String @default("تماس با ما") @map("hero_title")
+  heroSubtitle String @default("با ما در ارتباط باشید") @map("hero_subtitle")
+  introTitle String @default("اطلاعات تماس") @map("intro_title")
+  introBody String @default("") @map("intro_body")
+  officeAddress String @default("") @map("office_address")
+  latitude Decimal? @db.Decimal(10, 7)
+  longitude Decimal? @db.Decimal(10, 7)
+  mapUrl String? @map("map_url")
+  responseHours String @default("") @map("response_hours")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("contact_page_content")
+}
+
+model ContactPhoneNumber {
+  id String @id @default(uuid()) @db.Uuid
+  label String @default("پشتیبانی")
+  phone String
+  isActive Boolean @default(true) @map("is_active")
+  displayOrder Int @default(0) @map("display_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([isActive, displayOrder])
+  @@map("contact_phone_numbers")
+}
+
+model ContactSupportEmail {
+  id String @id @default(uuid()) @db.Uuid
+  label String @default("ایمیل پشتیبانی")
+  email String
+  isActive Boolean @default(true) @map("is_active")
+  displayOrder Int @default(0) @map("display_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([isActive, displayOrder])
+  @@map("contact_support_emails")
+}
+
+model ContactResponseHour {
+  id String @id @default(uuid()) @db.Uuid
+  dayLabel String @map("day_label")
+  hours String
+  isActive Boolean @default(true) @map("is_active")
+  displayOrder Int @default(0) @map("display_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([isActive, displayOrder])
+  @@map("contact_response_hours")
+}
+
+model LegalDocument {
+  id String @id @default(uuid()) @db.Uuid
+  documentType String @map("document_type")
+  title String
+  content String @db.Text
+  versionNumber Int @default(1) @map("version_number")
+  effectiveDate DateTime @default(now()) @map("effective_date")
+  isActive Boolean @default(true) @map("is_active")
+  scheduledPublishDate DateTime? @map("scheduled_publish_date")
+  lastUpdated DateTime @default(now()) @map("last_updated")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@index([documentType, isActive])
+  @@map("legal_documents")
+}
+
+model LegalDocumentVersion {
+  id String @id @default(uuid()) @db.Uuid
+  documentId String @map("document_id")
+  documentType String @map("document_type")
+  title String
+  content String @db.Text
+  versionNumber Int @map("version_number")
+  effectiveDate DateTime @map("effective_date")
+  archivedAt DateTime @default(now()) @map("archived_at")
+  @@index([documentId])
+  @@map("legal_document_versions")
+}
+
+model LegalChangeLog {
+  id String @id @default(uuid()) @db.Uuid
+  documentId String? @map("document_id")
+  documentType String? @map("document_type")
+  actor String @default("admin")
+  action String
+  summary String? @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  @@index([documentId, createdAt])
+  @@map("legal_change_logs")
+}
+
+model LegalConsent {
+  id String @id @default(uuid()) @db.Uuid
+  userIdentifier String @map("user_identifier")
+  documentType String @map("document_type")
+  documentVersion Int @map("document_version")
+  acceptedAt DateTime @default(now()) @map("accepted_at")
+  ipAddress String? @map("ip_address")
+  userAgent String? @map("user_agent")
+  @@index([userIdentifier, documentType])
+  @@map("legal_consents")
+}
+
+model LegalViewLog {
+  id String @id @default(uuid()) @db.Uuid
+  viewerIdentifier String? @map("viewer_identifier")
+  documentType String @map("document_type")
+  viewedAt DateTime @default(now()) @map("viewed_at")
+  ipAddress String? @map("ip_address")
+  userAgent String? @map("user_agent")
+  @@index([documentType, viewedAt])
+  @@map("legal_view_logs")
+}
+
+// ── Shop ──
+
+model ShopCategory {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name String
+  slug String @unique
+  description String @default("")
+  imageUrl String @default("") @map("image_url")
+  heroImageUrl String @default("") @map("hero_image_url")
+  aboutTitle String @default("درباره این دسته‌بندی") @map("about_title")
+  aboutDescription String @default("") @db.Text @map("about_description")
+  aboutImageUrl String @default("") @map("about_image_url")
+  iconKey String @default("imaging-equipment") @map("icon_key")
+  colorTheme String @default("blue") @map("color_theme")
+  parentId String? @map("parent_id") @db.Uuid
+  isActive Boolean @default(true) @map("is_active")
+  displayOrder Int @default(0) @map("display_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  parent ShopCategory? @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children ShopCategory[] @relation("CategoryHierarchy")
+  products ShopProduct[]
+  @@index([parentId, displayOrder])
+  @@map("shop_categories")
+}
+
+model ShopProduct {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name String
+  slug String @unique
+  description String @default("") @db.Text
+  shortDescription String @default("") @map("short_description")
+  technicalSpecifications String @default("") @db.Text @map("technical_specifications")
+  categoryId String? @map("category_id") @db.Uuid
+  brand String @default("")
+  sku String @default("") @unique
+  price Decimal @db.Decimal(14, 0)
+  oldPrice Decimal? @map("old_price") @db.Decimal(14, 0)
+  discountPercent Int @default(0) @map("discount_percent")
+  stock Int @default(0)
+  reservedStock Int @default(0) @map("reserved_stock")
+  maxOrderQty Int? @map("max_order_qty")
+  imageUrl String @default("") @map("image_url")
+  gallery Json @default("[]")
+  isActive Boolean @default(true) @map("is_active")
+  isFeatured Boolean @default(false) @map("is_featured")
+  rating Float @default(0)
+  reviewCount Int @default(0) @map("review_count")
+  salesCount Int @default(0) @map("sales_count")
+  attributes Json @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  category ShopCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  orderItems ShopOrderItem[]
+  @@index([categoryId, isActive])
+  @@index([isFeatured, isActive])
+  @@index([slug])
+  @@map("shop_products")
+}
+
+model ShopOrder {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderNumber String @unique @map("order_number")
+  userId String? @map("user_id") @db.Uuid
+  customerName String @map("customer_name")
+  customerPhone String @map("customer_phone")
+  customerEmail String? @map("customer_email")
+  shippingAddress String @default("") @db.Text @map("shipping_address")
+  notes String? @db.Text
+  subtotal Decimal @db.Decimal(14, 0)
+  discountTotal Decimal @default(0) @db.Decimal(14, 0) @map("discount_total")
+  shippingCost Decimal @default(0) @db.Decimal(14, 0) @map("shipping_cost")
+  total Decimal @db.Decimal(14, 0)
+  status String @default("pending")
+  paymentStatus String @default("unpaid") @map("payment_status")
+  paymentReference String? @map("payment_reference")
+  trackingCode String? @map("tracking_code")
+  // Checkout — shipping info
+  firstName String? @map("first_name")
+  lastName String? @map("last_name")
+  province String?
+  city String?
+  postalCode String? @map("postal_code")
+  // Checkout — shipping method
+  shippingMethod String? @map("shipping_method")
+  shippingMethodName String? @map("shipping_method_name")
+  // Checkout — invoice
+  needInvoice Boolean @default(false) @map("need_invoice")
+  companyNationalId String? @map("company_national_id")
+  companyEconomicCode String? @map("company_economic_code")
+  companyRegistrationNumber String? @map("company_registration_number")
+  companyName String? @map("company_name")
+  // Checkout — payment
+  paymentMethod String? @map("payment_method")
+  items ShopOrderItem[]
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([status, createdAt])
+  @@index([customerPhone])
+  @@index([userId])
+  @@map("shop_orders")
+}
+
+model ShopShippingMethod {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code String @unique
+  name String
+  description String @default("") @db.Text
+  price Decimal @db.Decimal(14, 0)
+  estimatedDays String? @map("estimated_days")
+  iconKey String @default("truck") @map("icon_key")
+  isActive Boolean @default(true) @map("is_active")
+  displayOrder Int @default(0) @map("display_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("shop_shipping_methods")
+}
+
+model ShopOrderItem {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId String @map("order_id") @db.Uuid
+  productId String @map("product_id") @db.Uuid
+  productName String @map("product_name")
+  unitPrice Decimal @db.Decimal(14, 0) @map("unit_price")
+  quantity Int
+  lineTotal Decimal @db.Decimal(14, 0) @map("line_total")
+  order ShopOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product ShopProduct @relation(fields: [productId], references: [id])
+  @@index([orderId])
+  @@index([productId])
+  @@map("shop_order_items")
+}
+
+model ShopDiscount {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code String @unique
+  description String @default("")
+  type String @default("percent")
+  value Decimal @db.Decimal(10, 2)
+  minOrderAmount Decimal? @map("min_order_amount") @db.Decimal(14, 0)
+  maxDiscountAmount Decimal? @map("max_discount_amount") @db.Decimal(14, 0)
+  usageLimit Int? @map("usage_limit")
+  usedCount Int @default(0) @map("used_count")
+  startsAt DateTime? @map("starts_at")
+  endsAt DateTime? @map("ends_at")
+  isActive Boolean @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@map("shop_discounts")
+}
+
+model TeleReportRequest {
+  id String @id @default(uuid()) @db.Uuid
+  requestNumber String @unique @map("request_number")
+  userId String? @map("user_id") @db.Uuid
+  country String
+  language String
+  patientFirstName String @map("patient_first_name")
+  patientLastName String @map("patient_last_name")
+  nationalId String? @map("national_id")
+  passportNumber String? @map("passport_number")
+  phone String
+  city String
+  age Int?
+  gender String
+  clinicalHistory String @db.Text @map("clinical_history")
+  symptoms String @db.Text
+  imagingType String @map("imaging_type")
+  imagingArea String @map("imaging_area")
+  studyDate DateTime? @map("study_date")
+  pacsUrl String? @db.Text @map("pacs_url")
+  cloudUrl String? @db.Text @map("cloud_url")
+  referralPath String? @map("referral_path")
+  referredAt DateTime? @map("referred_at")
+  assignedDoctorId String? @map("assigned_doctor_id") @db.Uuid
+  paymentStatus String @default("unpaid") @map("payment_status")
+  paymentAmount Decimal @default(0) @db.Decimal(14, 0) @map("payment_amount")
+  paymentReference String? @map("payment_reference")
+  paidAt DateTime? @map("paid_at")
+  idempotencyKey String? @unique @map("idempotency_key")
+  aiAnalysisResult Json? @map("ai_analysis_result")
+  aiSuggestedPrice Decimal? @db.Decimal(14, 0) @map("ai_suggested_price")
+  aiConfirmedAt DateTime? @map("ai_confirmed_at")
+  status String @default("new")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  attachments TeleReportAttachment[]
+  reports RadiologyReport[]
+  infoRequests InfoRequest[]
+  @@index([status, createdAt])
+  @@index([phone])
+  @@index([userId])
+  @@index([assignedDoctorId])
+  @@map("tele_report_requests")
+}
+
+model TeleReportAttachment {
+  id String @id @default(uuid()) @db.Uuid
+  requestId String @map("request_id") @db.Uuid
+  originalName String @map("original_name")
+  storedName String @map("stored_name")
+  mimeType String @map("mime_type")
+  size Int
+  storagePath String @map("storage_path")
+  createdAt DateTime @default(now()) @map("created_at")
+  request TeleReportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  @@index([requestId])
+  @@map("tele_report_attachments")
+}
+
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  fullName String @map("full_name")
+  email String @unique
+  passwordHash String @map("password_hash")
+  role String @default("user") @map("role")
+  status String @default("active") @map("status")
+  country String @default("IR") @map("country")
+  organizationId String? @map("organization_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  reports RadiologyReport[]
+  infoRequests InfoRequest[]
+  doctorProfile DoctorProfile?
+  imagingCenterId String? @map("imaging_center_id") @db.Uuid
+  imagingCenter ImagingCenter? @relation(fields: [imagingCenterId], references: [id], onDelete: SetNull)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  tickets Ticket[]
+  ticketReplies TicketReply[]
+  assignedTickets Ticket[] @relation("AssignedExpert")
+  chatSessions ChatSession[]
+  expertChatSessions ChatSession[] @relation("ChatExpert")
+  chatMessages ChatMessage[]
+  reviews Review[]
+  reviewedReviews Review[] @relation("ReviewReviewer")
+  telereportNotifications TelereportNotification[]
+  shopOrders ShopOrder[]
+  teleReportRequests TeleReportRequest[]
+  medicalReports MedicalReport[]
+  userTransactions UserTransaction[]
+  userNotifications UserNotification[]
+  orgStatusLogs OrgRequestStatusLog[]
+  @@index([imagingCenterId])
+  @@index([organizationId])
+  @@map("users")
+}
+
+// ── Support Tickets (تیکت‌های پشتیبانی) ──
+
+model Ticket {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subject String
+  message String @db.Text
+  status String @default("open")
+  priority String @default("medium")
+  userId String @map("user_id") @db.Uuid
+  assignedTo String? @map("assigned_to") @db.Uuid
+  category String @default("general")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expert User? @relation("AssignedExpert", fields: [assignedTo], references: [id], onDelete: SetNull)
+  replies TicketReply[]
+  @@index([status, createdAt])
+  @@index([priority])
+  @@index([assignedTo])
+  @@map("support_tickets")
+}
+
+model TicketReply {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId String @map("ticket_id") @db.Uuid
+  authorId String @map("author_id") @db.Uuid
+  message String @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  @@index([ticketId])
+  @@index([authorId])
+  @@map("support_ticket_replies")
+}
+
+// ── Chat Sessions (چت آنلاین) ──
+
+model ChatSession {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  expertId String? @map("expert_id") @db.Uuid
+  status String @default("waiting")
+  subject String @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expert User? @relation("ChatExpert", fields: [expertId], references: [id], onDelete: SetNull)
+  messages ChatMessage[]
+  @@index([status, createdAt])
+  @@index([expertId])
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId String @map("session_id") @db.Uuid
+  senderId String @map("sender_id") @db.Uuid
+  senderRole String @default("user")
+  content String @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sender User @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  @@index([sessionId])
+  @@index([senderId])
+  @@map("chat_messages")
+}
+
+// ── Reviews (نظرات) ──
+
+model Review {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  targetType String @map("target_type")
+  targetId String @map("target_id")
+  content String @db.Text
+  rating Int @default(5)
+  status String @default("pending")
+  rejectReason String? @db.Text @map("reject_reason")
+  reviewedAt DateTime? @map("reviewed_at")
+  reviewedBy String? @map("reviewed_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewer User? @relation("ReviewReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@map("support_reviews")
+}
+
+// ── Telereport Notifications (اعلان‌های تله‌ریپورت) ──
+
+model TelereportNotification {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId String @map("request_id") @db.Uuid
+  recipient String
+  message String @db.Text
+  sentBy String? @map("sent_by") @db.Uuid
+  sentAt DateTime @default(now()) @map("sent_at")
+  sentByUser User? @relation(fields: [sentBy], references: [id], onDelete: SetNull)
+  @@index([requestId])
+  @@map("telereport_notifications")
+}
+
+// ── Radiology Reports ──
+
+model RadiologyReport {
+  id String @id @default(uuid()) @db.Uuid
+  requestId String @map("request_id") @db.Uuid
+  authorId String? @map("author_id") @db.Uuid
+  findings String @db.Text @default("")
+  conclusion String @db.Text @default("")
+  status String @default("draft")
+  signed Boolean @default(false)
+  signatureName String? @map("signature_name")
+  signedAt DateTime? @map("signed_at")
+  adminApprovalStatus String @default("pending") @map("admin_approval_status")
+  supportApprovalStatus String @default("pending") @map("support_approval_status")
+  rejectReason String? @db.Text @map("reject_reason")
+  approvedById String? @map("approved_by_id") @db.Uuid
+  approvedAt DateTime? @map("approved_at")
+  reviewedBy String? @map("reviewed_by")
+  reviewedAt DateTime? @map("reviewed_at")
+  approvalLogs Json @default("[]") @map("approval_logs")
+  aiAssistantDraft Json? @map("ai_assistant_draft")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  request TeleReportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  author User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  images RadiologyReportImage[]
+  @@index([requestId])
+  @@index([authorId])
+  @@index([status])
+  @@map("radiology_reports")
+}
+
+model RadiologyReportImage {
+  id String @id @default(uuid()) @db.Uuid
+  reportId String @map("report_id") @db.Uuid
+  originalName String @map("original_name")
+  storedName String @map("stored_name")
+  mimeType String @map("mime_type")
+  size Int
+  storagePath String @map("storage_path")
+  caption String @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+  report RadiologyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  @@index([reportId])
+  @@map("radiology_report_images")
+}
+
+// ── Info Requests (درخواست اطلاعات تکمیلی) ──
+
+model InfoRequest {
+  id String @id @default(uuid()) @db.Uuid
+  requestId String @map("request_id") @db.Uuid
+  authorId String? @map("author_id") @db.Uuid
+  title String
+  body String @db.Text
+  status String @default("open")
+  response String? @db.Text
+  respondedAt DateTime? @map("responded_at")
+  messages Json @default("[]") @map("messages")
+  followUpStatus String @default("normal") @map("follow_up_status")
+  adminNote String? @db.Text @map("admin_note")
+  adminLogs Json @default("[]") @map("admin_logs")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  request TeleReportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  author User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  @@index([requestId])
+  @@index([authorId])
+  @@index([status, createdAt])
+  @@map("info_requests")
+}
+
+// ── Doctor Profile (پروفایل تخصصی) ──
+
+model DoctorProfile {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+  fullName String @map("full_name")
+  email String
+  specialty String @default("")
+  subSpecialty String? @map("sub_specialty")
+  licenseNumber String? @map("license_number")
+  biography String @db.Text @default("")
+  education String @db.Text @default("")
+  certifications String @db.Text @default("")
+  experienceYears Int @default(0) @map("experience_years")
+  languages String @default("")
+  workplace String @default("")
+  maxDailyReports Int @default(10) @map("max_daily_reports")
+  tariff Int @default(0) @map("tariff")
+  isActive Boolean @default(true) @map("is_active")
+  collaborationStatus String @default("pending") @map("collaboration_status")
+  notificationEmail Boolean @default(true) @map("notification_email")
+  notificationSms Boolean @default(false) @map("notification_sms")
+  avatarUrl String? @map("avatar_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("doctor_profiles")
+}
+
+// ── Imaging Centers (مراکز تصویربرداری) ──
+
+model ImagingCenter {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name String
+  slug String @unique
+  description String @default("") @db.Text
+  address String @default("") @db.Text
+  phone String @default("")
+  email String @default("")
+  city String @default("")
+  province String @default("")
+  latitude Decimal? @db.Decimal(10, 7)
+  longitude Decimal? @db.Decimal(10, 7)
+  logoUrl String? @map("logo_url")
+  licenseNumber String? @map("license_number")
+  contactPerson String? @map("contact_person")
+  contactPhone String? @map("contact_phone")
+  isActive Boolean @default(true) @map("is_active")
+  displayOrder Int @default(0) @map("display_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  users User[]
+  contracts OrganizationContract[]
+  @@map("imaging_centers")
+}
+
+// ── Organizations (سازمان‌ها) ──
+
+model Organization {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name String
+  slug String @unique
+  type String @default("company")
+  description String @default("") @db.Text
+  address String @default("") @db.Text
+  phone String @default("")
+  email String @default("")
+  city String @default("")
+  province String @default("")
+  nationalId String? @map("national_id")
+  economicCode String? @map("economic_code")
+  registrationNumber String? @map("registration_number")
+  contactPerson String? @map("contact_person")
+  contactPhone String? @map("contact_phone")
+  contactEmail String? @map("contact_email")
+  logo String?
+  isActive Boolean @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  users User[]
+  contracts OrganizationContract[]
+  orgInvoices OrgInvoice[]
+  settings OrgSettings?
+  @@map("organizations")
+}
+
+model OrganizationContract {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  centerId String? @map("center_id") @db.Uuid
+  contractNumber String @unique @map("contract_number")
+  title String
+  type String @default("service")
+  status String @default("active")
+  startDate DateTime @map("start_date")
+  endDate DateTime? @map("end_date")
+  terms String @default("") @db.Text @map("terms")
+  discountPercent Int @default(0) @map("discount_percent")
+  creditLimit Decimal? @db.Decimal(14, 0) @map("credit_limit")
+  signedBy String? @map("signed_by")
+  signedAt DateTime? @map("signed_at")
+  notes String? @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  center ImagingCenter? @relation(fields: [centerId], references: [id], onDelete: SetNull)
+  invoices OrgInvoice[]
+  @@index([organizationId])
+  @@index([centerId])
+  @@index([status])
+  @@map("organization_contracts")
+}
+
+// ── Tele-Report Tariffs (تعرفه‌های تله‌ریپورت) ──
+
+model TeleReportTariff {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name String
+  imagingType String @map("imaging_type")
+  description String @default("") @db.Text
+  price Decimal @db.Decimal(14, 0)
+  currency String @default("IRR")
+  aiAnalysisEnabled Boolean @default(false) @map("ai_analysis_enabled")
+  aiAnalysisPrice Decimal @default(0) @db.Decimal(14, 0) @map("ai_analysis_price")
+  rushEnabled Boolean @default(false) @map("rush_enabled")
+  rushPrice Decimal @default(0) @db.Decimal(14, 0) @map("rush_price")
+  isActive Boolean @default(true) @map("is_active")
+  displayOrder Int @default(0) @map("display_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([imagingType])
+  @@index([isActive])
+  @@map("tele_report_tariffs")
+}
+
+// ── Country Tariff Settings (تنظیمات تعرفه و کارمزد هر کشور) ──
+
+model CountryTariffSetting {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  countryCode String @unique @map("country_code")
+  countryName String @map("country_name")
+  currencyCode String @default("IRR") @map("currency_code")
+  commissionPercent Decimal @default(0) @db.Decimal(5, 2) @map("commission_percent")
+  taxPercent Decimal @default(0) @db.Decimal(5, 2) @map("tax_percent")
+  aiAnalysisEnabled Boolean @default(false) @map("ai_analysis_enabled")
+  aiAnalysisPrice Decimal @default(0) @db.Decimal(14, 0) @map("ai_analysis_price")
+  rushEnabled Boolean @default(false) @map("rush_enabled")
+  rushPriceMultiplier Decimal @default(1) @db.Decimal(5, 2) @map("rush_price_multiplier")
+  isActive Boolean @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("country_tariff_settings")
+}
+
+// ── Area Tariff (تعرفه بر اساس کشور، نوع تصویربرداری و ناحیه) ──
+
+model AreaTariff {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  countryCode String @map("country_code")
+  imagingType String @map("imaging_type")
+  imagingArea String @map("imaging_area")
+  price Decimal @db.Decimal(14, 0)
+  currencyCode String @default("IRR") @map("currency_code")
+  isActive Boolean @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@unique([countryCode, imagingType, imagingArea])
+  @@index([countryCode])
+  @@map("area_tariffs")
+}
+
+// ── Routing Rules (قوانین مسیریابی هوشمند) ──
+
+model RoutingRule {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name String
+  priority Int @default(0)
+  specialty String @default("")
+  imagingType String @default("")
+  urgency String @default("normal")
+  maxWorkload Int @default(10) @map("max_workload")
+  preferredDoctorId String? @map("preferred_doctor_id") @db.Uuid
+  isActive Boolean @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([priority])
+  @@index([isActive])
+  @@map("routing_rules")
+}
+
+model RoutingLog {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId String @map("request_id") @db.Uuid
+  ruleId String? @map("rule_id") @db.Uuid
+  assignedDoctorId String? @map("assigned_doctor_id") @db.Uuid
+  algorithm String @default("auto")
+  reason String @default("")
+  processingTimeMs Int @default(0) @map("processing_time_ms")
+  success Boolean @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  @@index([requestId])
+  @@index([assignedDoctorId])
+  @@index([createdAt])
+  @@map("routing_logs")
+}
+
+// ── Public Page Content (محتوای صفحات عمومی) ──
+
+model PublicPageContent {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pageKey String @unique @map("page_key")
+  title String
+  subtitle String @default("")
+  content String @default("") @db.Text
+  metaDescription String @default("") @db.Text @map("meta_description")
+  isActive Boolean @default(true) @map("is_active")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("public_page_contents")
+}
+
+// ── Notifications (اعلان‌ها) ──
+
+model Notification {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title String
+  message String @db.Text
+  type String @default("general")
+  targetAudience String @default("all") @map("target_audience")
+  targetUserId String? @map("target_user_id") @db.Uuid
+  channels Json @default("[\"in_app\"]")
+  status String @default("sent")
+  sentCount Int @default(0) @map("sent_count")
+  failedCount Int @default(0) @map("failed_count")
+  scheduledAt DateTime? @map("scheduled_at")
+  sentAt DateTime? @map("sent_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@index([type, createdAt])
+  @@index([targetAudience])
+  @@map("notifications")
+}
+
+model SmsLog {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phoneNumber String @map("phone_number")
+  message String @db.Text
+  templateKey String? @map("template_key")
+  status String @default("pending")
+  provider String @default("")
+  providerMessageId String? @map("provider_message_id")
+  errorMessage String? @db.Text @map("error_message")
+  sentAt DateTime? @map("sent_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@index([phoneNumber])
+  @@index([status, createdAt])
+  @@map("sms_logs")
+}
+
+model SmsTemplate {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key String @unique
+  title String
+  body String @db.Text
+  variables Json @default("[]")
+  isActive Boolean @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("sms_templates")
+}
+
+// ── Country Config (مدیریت کشورها، زبان‌ها و ارزها) ──
+
+model CountryConfig {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code String @unique
+  name String
+  currencyCode String @default("IRR") @map("currency_code")
+  currencySymbol String @default("﷼") @map("currency_symbol")
+  language String @default("fa")
+  phonePrefix String @default("+98") @map("phone_prefix")
+  isActive Boolean @default(true) @map("is_active")
+  displayOrder Int @default(0) @map("display_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("country_configs")
+}
+
+// ── Payment Gateway Config (تنظیمات درگاه‌های پرداخت) ──
+
+model PaymentGatewayConfig {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name String
+  code String @unique
+  provider String
+  merchantId String? @map("merchant_id")
+  apiKey String? @map("api_key")
+  callbackUrl String? @map("callback_url")
+  sandboxMode Boolean @default(false) @map("sandbox_mode")
+  isActive Boolean @default(true) @map("is_active")
+  displayOrder Int @default(0) @map("display_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("payment_gateway_configs")
+}
+
+// ── Security Settings (تنظیمات امنیتی) ──
+
+model SecuritySetting {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  settingKey String @unique @map("setting_key")
+  settingValue Json @default("{}") @map("setting_value")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("security_settings")
+}
+
+// ── User Panel: Medical Reports (گزارش‌های پزشکی کاربر) ──
+
+model MedicalReport {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  title String
+  type String @default("general")
+  fileUrl String? @map("file_url")
+  description String @default("") @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+  @@map("medical_reports")
+}
+
+// ── User Panel: Transactions (تراکنش‌های کاربر) ──
+
+model UserTransaction {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  amount Decimal @db.Decimal(14, 0)
+  status String @default("paid") // paid | unpaid | refunded
+  invoiceRef String? @map("invoice_ref")
+  description String @default("") @db.Text
+  type String @default("shop") // shop | telereport | other
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+  @@map("user_transactions")
+}
+
+// ── User Panel: User Notifications (اعلان‌های شخصی کاربر) ──
+
+model UserNotification {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  title String
+  message String @db.Text
+  type String @default("general")
+  isRead Boolean @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+  @@map("user_notifications")
+}
+
+// ── Organization Panel: Invoices (فاکتورهای سازمان) ──
+
+model OrgInvoice {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  contractId String @map("contract_id") @db.Uuid
+  invoiceNumber String @unique @map("invoice_number")
+  amount Decimal @db.Decimal(14, 0)
+  dueDate DateTime @map("due_date")
+  status String @default("unpaid") // paid | unpaid | overdue
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contract OrganizationContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  payments OrgPayment[]
+  @@index([organizationId])
+  @@index([contractId])
+  @@index([status])
+  @@map("org_invoices")
+}
+
+// ── Organization Panel: Payments (پرداخت‌های سازمان) ──
+
+model OrgPayment {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceId String @map("invoice_id") @db.Uuid
+  amount Decimal @db.Decimal(14, 0)
+  paidAt DateTime @default(now()) @map("paid_at")
+  method String @default("bank_transfer")
+  reference String @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+  invoice OrgInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  @@index([invoiceId])
+  @@map("org_payments")
+}
+
+// ── Organization Panel: Settings (تنظیمات سازمان) ──
+
+model OrgSettings {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId String @unique @map("org_id") @db.Uuid
+  settings Json @default("{\"staffCanSubmit\":true,\"staffCanViewReports\":true}")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  @@map("org_settings")
+}
+
+// ── Organization Panel: Request Status Logs (تاریخچه وضعیت درخواست) ──
+
+model OrgRequestStatusLog {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId String @map("request_id") @db.Uuid
+  status String
+  note String @default("") @db.Text
+  createdBy String? @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  user User? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  @@index([requestId])
+  @@map("org_request_status_logs")
+}
+
+// ── System & Authentication Logs (لاگ سیستم و احراز هویت) ──
+
+model SystemAuthLog {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId String @map("request_id")
+  source String @default("backend")
+  level String @default("INFO")
+  operation String
+  method String @default("POST")
+  routePath String @map("route_path")
+  targetUrl String @default("") @map("target_url")
+  statusCode Int @default(200) @map("status_code")
+  durationMs Int @default(0) @map("duration_ms")
+  backendReached Boolean @default(true) @map("backend_reached")
+  dtoValidationPassed Boolean? @map("dto_validation_passed")
+  operationResult String @default("SUCCESS") @map("operation_result")
+  connectionStatus String @default("CONNECTED") @map("connection_status")
+  failureStage String @default("NONE") @map("failure_stage")
+  errorCategory String @default("NONE") @map("error_category")
+  errorMessage String? @db.Text @map("error_message")
+  maskedIdentifier String? @map("masked_identifier")
+  responseType String @default("json") @map("response_type")
+  metadata Json @default("{}")
+  startedAt DateTime @default(now()) @map("started_at")
+  completedAt DateTime @default(now()) @map("completed_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([requestId])
+  @@index([operation, createdAt])
+  @@index([statusCode, createdAt])
+  @@index([level, createdAt])
+  @@map("system_auth_logs")
+}
+

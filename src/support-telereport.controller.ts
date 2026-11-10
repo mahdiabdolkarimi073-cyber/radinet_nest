@@ -1,0 +1,206 @@
+import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards, NotFoundException, BadRequestException } from '@nestjs/common';
+import { IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { PrismaService } from './prisma.service';
+import { SupportExpertGuard, verifySupportToken } from './support-auth';
+
+class TelereportQueryDto { @IsOptional() @IsString() status?: string; @IsOptional() @IsString() search?: string; }
+class StatusDto { @IsIn(['new', 'pending', 'assigned', 'in_progress', 'coordinating', 'scheduled', 'completed', 'cancelled']) status!: string; }
+class NotifyDto { @IsIn(['patient', 'doctor', 'both']) recipient!: string; @IsString() @MinLength(1) message!: string; }
+class CoordinateDto { @IsOptional() @IsString() notes?: string; @IsOptional() @IsString() scheduledAt?: string; }
+class AssignDoctorDto { @IsString() doctorId!: string; }
+class ReviewReportDto {
+  @IsString() reportId!: string;
+  @IsIn(['approved', 'rejected']) decision!: 'approved' | 'rejected';
+  @IsOptional() @IsString() rejectReason?: string;
+}
+
+@Controller('support/telereports')
+@UseGuards(SupportExpertGuard)
+export class SupportTelereportController {
+  constructor(private readonly prisma: PrismaService) {}
+
+  @Get()
+  async list(@Headers('authorization') auth: string, @Query() query: TelereportQueryDto) {
+    verifySupportToken(auth);
+    return this.prisma.teleReportRequest.findMany({
+      where: {
+        ...(query.status && query.status !== 'all' ? { status: query.status } : {}),
+        ...(query.search?.trim()
+          ? {
+              OR: [
+                { requestNumber: { contains: query.search.trim(), mode: 'insensitive' } },
+                { patientFirstName: { contains: query.search.trim(), mode: 'insensitive' } },
+                { patientLastName: { contains: query.search.trim(), mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        reports: {
+          select: {
+            id: true,
+            status: true,
+            signed: true,
+            authorId: true,
+            author: { select: { id: true, fullName: true } },
+          },
+        },
+        _count: { select: { attachments: true, infoRequests: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  @Get('doctors')
+  async listDoctors(@Headers('authorization') auth: string) {
+    verifySupportToken(auth);
+    const [profiles, doctorUsers] = await Promise.all([
+      this.prisma.doctorProfile.findMany({
+        where: { isActive: true },
+        include: { user: { select: { id: true, fullName: true, email: true } } },
+      }),
+      this.prisma.user.findMany({
+        where: { role: { in: ['radiologist', 'doctor'] }, status: 'active' },
+        select: { id: true, fullName: true, email: true },
+      }),
+    ]);
+    const map = new Map<string, any>();
+    for (const p of profiles) {
+      const id = p.userId || p.id;
+      map.set(id, {
+        id: p.id,
+        userId: p.userId,
+        fullName: p.fullName || p.user?.fullName || 'پزشک رادیولوژیست',
+        specialty: p.specialty || 'متخصص رادیولوژی و تله‌ریپورت',
+      });
+    }
+    for (const u of doctorUsers) {
+      if (!map.has(u.id)) {
+        map.set(u.id, {
+          id: u.id,
+          userId: u.id,
+          fullName: u.fullName || u.email,
+          specialty: 'متخصص رادیولوژی و تله‌ریپورت',
+        });
+      }
+    }
+    return Array.from(map.values());
+  }
+
+  @Get(':id')
+  async detail(@Headers('authorization') auth: string, @Param('id') id: string) {
+    verifySupportToken(auth);
+    const request = await this.prisma.teleReportRequest.findUnique({
+      where: { id },
+      include: {
+        attachments: true,
+        reports: { include: { author: { select: { id: true, fullName: true } } } },
+        infoRequests: true,
+      },
+    });
+    if (!request) throw new NotFoundException('درخواست تله‌ریپورت یافت نشد');
+    const notifications = await this.prisma.telereportNotification.findMany({
+      where: { requestId: id },
+      orderBy: { sentAt: 'desc' },
+    });
+    return { ...request, notifications };
+  }
+
+  @Patch(':id/status')
+  async status(@Headers('authorization') auth: string, @Param('id') id: string, @Body() dto: StatusDto) {
+    verifySupportToken(auth);
+    const request = await this.prisma.teleReportRequest.findUnique({ where: { id } });
+    if (!request) throw new NotFoundException('درخواست تله‌ریپورت یافت نشد');
+    return this.prisma.teleReportRequest.update({ where: { id }, data: { status: dto.status } });
+  }
+
+  @Patch(':id/assign-doctor')
+  async assignDoctor(@Headers('authorization') auth: string, @Param('id') id: string, @Body() dto: AssignDoctorDto) {
+    verifySupportToken(auth);
+    const request = await this.prisma.teleReportRequest.findUnique({ where: { id } });
+    if (!request) throw new NotFoundException('درخواست تله‌ریپورت یافت نشد');
+
+    const doctor = await this.prisma.doctorProfile.findFirst({
+      where: { OR: [{ id: dto.doctorId }, { userId: dto.doctorId }] },
+    });
+    const doctorUserId = doctor?.userId ?? dto.doctorId;
+
+    const existingReport = await this.prisma.radiologyReport.findFirst({
+      where: { requestId: id },
+    });
+
+    const report = existingReport
+      ? await this.prisma.radiologyReport.update({
+          where: { id: existingReport.id },
+          data: { authorId: doctorUserId, status: 'draft' },
+          include: { author: { select: { id: true, fullName: true } } },
+        })
+      : await this.prisma.radiologyReport.create({
+          data: { requestId: id, authorId: doctorUserId, status: 'draft', findings: '', conclusion: '' },
+          include: { author: { select: { id: true, fullName: true } } },
+        });
+
+    await this.prisma.teleReportRequest.update({
+      where: { id },
+      data: { status: 'assigned', assignedDoctorId: doctorUserId },
+    });
+
+    return report;
+  }
+
+  @Patch(':id/review-report')
+  async reviewReport(@Headers('authorization') auth: string, @Param('id') id: string, @Body() dto: ReviewReportDto) {
+    const identity = verifySupportToken(auth);
+    const report = await this.prisma.radiologyReport.findUnique({ where: { id: dto.reportId } });
+    if (!report || report.requestId !== id) throw new BadRequestException('گزارش رادیولوژی یافت نشد');
+
+    const updated = await this.prisma.radiologyReport.update({
+      where: { id: dto.reportId },
+      data: {
+        status: dto.decision,
+        signed: dto.decision === 'approved',
+        signedAt: dto.decision === 'approved' ? (report.signedAt ?? new Date()) : null,
+        rejectReason:
+          dto.decision === 'rejected'
+            ? (dto.rejectReason?.trim() || 'نیاز به بازبینی و اصلاح گزارش توسط پزشک رادیولوژیست')
+            : null,
+        reviewedBy: identity.id,
+        reviewedAt: new Date(),
+      },
+      include: { author: { select: { id: true, fullName: true } } },
+    });
+
+    await this.prisma.teleReportRequest.update({
+      where: { id },
+      data: { status: dto.decision === 'approved' ? 'completed' : 'in_progress' },
+    });
+
+    return updated;
+  }
+
+  @Post(':id/notify')
+  async notify(@Headers('authorization') auth: string, @Param('id') id: string, @Body() dto: NotifyDto) {
+    const identity = verifySupportToken(auth);
+    const request = await this.prisma.teleReportRequest.findUnique({ where: { id } });
+    if (!request) throw new NotFoundException('درخواست تله‌ریپورت یافت نشد');
+    const notification = await this.prisma.telereportNotification.create({
+      data: { requestId: id, recipient: dto.recipient, message: dto.message, sentBy: identity.id },
+    });
+    return { ok: true, notification };
+  }
+
+  @Patch(':id/coordinate')
+  async coordinate(@Headers('authorization') auth: string, @Param('id') id: string, @Body() dto: CoordinateDto) {
+    verifySupportToken(auth);
+    const request = await this.prisma.teleReportRequest.findUnique({ where: { id } });
+    if (!request) throw new NotFoundException('درخواست تله‌ریپورت یافت نشد');
+    return this.prisma.teleReportRequest.update({
+      where: { id },
+      data: {
+        status: 'coordinating',
+        ...(dto.notes !== undefined ? { clinicalHistory: `${request.clinicalHistory}\n[پشتیبانی] ${dto.notes}` } : {}),
+        ...(dto.scheduledAt ? { studyDate: new Date(dto.scheduledAt) } : {}),
+      },
+    });
+  }
+}
