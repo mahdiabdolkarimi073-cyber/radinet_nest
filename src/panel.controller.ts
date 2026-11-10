@@ -361,6 +361,7 @@ export class PanelController {
     const [reply] = await this.prisma.$transaction([
       this.prisma.ticketReply.create({
         data: { ticketId: id, authorId: identity.id, message: dto.message },
+        include: { author: { select: { id: true, fullName: true, role: true } } },
       }),
       this.prisma.ticket.update({
         where: { id },

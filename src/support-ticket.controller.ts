@@ -59,7 +59,10 @@ export class SupportTicketController {
     const ticket = await this.prisma.ticket.findUnique({ where: { id } });
     if (!ticket) throw new NotFoundException('تیکت یافت نشد');
     const [reply] = await this.prisma.$transaction([
-      this.prisma.ticketReply.create({ data: { ticketId: id, authorId: identity.id, message: dto.message } }),
+      this.prisma.ticketReply.create({
+        data: { ticketId: id, authorId: identity.id, message: dto.message },
+        include: { author: { select: { id: true, fullName: true, role: true } } },
+      }),
       this.prisma.ticket.update({ where: { id }, data: { status: 'pending' } }),
     ]);
     return reply;

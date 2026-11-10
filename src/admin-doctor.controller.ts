@@ -1,16 +1,19 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   Param,
   Patch,
+  Post,
   Query,
   UnauthorizedException,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
 import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from './prisma.service';
@@ -35,7 +38,27 @@ class DoctorQueryDto {
   @IsOptional() @IsString() limit?: string;
 }
 
+class CreateDoctorDto {
+  @IsString() fullName!: string;
+  @IsOptional() @IsString() email?: string;
+  @IsOptional() @IsString() specialty?: string;
+  @IsOptional() @IsString() subSpecialty?: string;
+  @IsOptional() @IsString() licenseNumber?: string;
+  @IsOptional() @IsString() workplace?: string;
+  @IsOptional() @IsInt() @Min(1) @Max(100) maxDailyReports?: number;
+  @IsOptional() @IsInt() @Min(0) tariff?: number;
+  @IsOptional() @IsBoolean() isActive?: boolean;
+  @IsOptional() @IsIn(['approved', 'pending', 'rejected']) collaborationStatus?: string;
+  @IsOptional() @IsString() biography?: string;
+  @IsOptional() @IsString() education?: string;
+  @IsOptional() @IsString() certifications?: string;
+  @IsOptional() @IsString() languages?: string;
+  @IsOptional() @IsInt() @Min(0) experienceYears?: number;
+}
+
 class UpdateDoctorDto {
+  @IsOptional() @IsString() fullName?: string;
+  @IsOptional() @IsString() email?: string;
   @IsOptional() @IsString() specialty?: string;
   @IsOptional() @IsString() subSpecialty?: string;
   @IsOptional() @IsString() licenseNumber?: string;
@@ -233,14 +256,109 @@ export class AdminDoctorController {
     };
   }
 
+  @Post()
+  async createDoctor(@Headers('authorization') auth: string, @Body() dto: CreateDoctorDto) {
+    verifyAdmin(auth);
+
+    if (!dto.fullName?.trim()) {
+      throw new BadRequestException('نام و نام خانوادگی پزشک الزامی است');
+    }
+
+    const email = (dto.email?.trim() || `doc_${Date.now()}@radinet.ir`).toLowerCase();
+
+    // Check if user already exists
+    let user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      const passwordHash = await bcrypt.hash('RadinetDoctor123!', 10);
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          fullName: dto.fullName.trim(),
+          role: 'radiologist',
+          status: dto.isActive !== false ? 'active' : 'inactive',
+          country: 'IR',
+          passwordHash,
+        },
+      });
+    } else {
+      // Ensure user has radiologist role and active status if specified
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          fullName: dto.fullName.trim(),
+          role: 'radiologist',
+          status: dto.isActive !== false ? 'active' : user.status,
+        },
+      });
+    }
+
+    // Check if doctor profile already exists for this user
+    let profile = await this.prisma.doctorProfile.findUnique({ where: { userId: user.id } });
+    if (profile) {
+      profile = await this.prisma.doctorProfile.update({
+        where: { id: profile.id },
+        data: {
+          fullName: dto.fullName.trim(),
+          email,
+          specialty: dto.specialty?.trim() || profile.specialty || 'متخصص رادیولوژی و تله‌ریپورت',
+          subSpecialty: dto.subSpecialty !== undefined ? dto.subSpecialty?.trim() || null : profile.subSpecialty,
+          licenseNumber: dto.licenseNumber !== undefined ? dto.licenseNumber?.trim() || null : profile.licenseNumber,
+          workplace: dto.workplace?.trim() || profile.workplace || 'مرکز تله‌رادیولوژی رادینت',
+          experienceYears: dto.experienceYears ?? profile.experienceYears ?? 5,
+          maxDailyReports: dto.maxDailyReports ?? profile.maxDailyReports ?? 20,
+          tariff: dto.tariff ?? profile.tariff ?? 950000,
+          isActive: dto.isActive !== undefined ? dto.isActive : profile.isActive,
+          collaborationStatus: dto.collaborationStatus || profile.collaborationStatus || 'approved',
+          biography: dto.biography !== undefined ? dto.biography : profile.biography,
+          education: dto.education !== undefined ? dto.education : profile.education,
+          certifications: dto.certifications !== undefined ? dto.certifications : profile.certifications,
+          languages: dto.languages !== undefined ? dto.languages : profile.languages,
+        },
+      });
+    } else {
+      profile = await this.prisma.doctorProfile.create({
+        data: {
+          userId: user.id,
+          fullName: dto.fullName.trim(),
+          email,
+          specialty: dto.specialty?.trim() || 'متخصص رادیولوژی و تله‌ریپورت',
+          subSpecialty: dto.subSpecialty?.trim() || null,
+          licenseNumber: dto.licenseNumber?.trim() || null,
+          workplace: dto.workplace?.trim() || 'مرکز تله‌رادیولوژی رادینت',
+          experienceYears: dto.experienceYears ?? 5,
+          maxDailyReports: dto.maxDailyReports ?? 20,
+          tariff: dto.tariff ?? 950000,
+          isActive: dto.isActive !== false,
+          collaborationStatus: dto.collaborationStatus || 'approved',
+          biography: dto.biography?.trim() || '',
+          education: dto.education?.trim() || '',
+          certifications: dto.certifications?.trim() || '',
+          languages: dto.languages?.trim() || 'فارسی',
+        },
+      });
+    }
+
+    return {
+      ...profile,
+      user: { id: user.id, role: user.role, status: user.status, country: user.country },
+      stats: { totalReports: 0, signedReports: 0, completedReports: 0, avgResponseHours: null },
+    };
+  }
+
   @Patch(':id')
   async updateDoctor(@Headers('authorization') auth: string, @Param('id') id: string, @Body() dto: UpdateDoctorDto) {
     verifyAdmin(auth);
 
-    const doctor = await this.prisma.doctorProfile.findUnique({ where: { id } });
+    const cleanId = id.startsWith('doc-') ? id.replace('doc-', '') : id;
+    const doctor = await this.prisma.doctorProfile.findFirst({
+      where: { OR: [{ id }, { id: cleanId }, { userId: id }, { userId: cleanId }] },
+      include: { user: true },
+    });
     if (!doctor) throw new NotFoundException('پزشک یافت نشد');
 
     const data: Prisma.DoctorProfileUpdateInput = {};
+    if (dto.fullName !== undefined) data.fullName = dto.fullName.trim();
+    if (dto.email !== undefined) data.email = dto.email.trim().toLowerCase();
     if (dto.specialty !== undefined) data.specialty = dto.specialty;
     if (dto.subSpecialty !== undefined) data.subSpecialty = dto.subSpecialty;
     if (dto.licenseNumber !== undefined) data.licenseNumber = dto.licenseNumber;
@@ -255,13 +373,24 @@ export class AdminDoctorController {
     if (dto.languages !== undefined) data.languages = dto.languages;
     if (dto.experienceYears !== undefined) data.experienceYears = dto.experienceYears;
 
-    if (Object.keys(data).length === 0) throw new BadRequestException('هیچ فیلدی برای به‌روزرسانی ارسال نشده است');
+    // Update associated User table if name, email or active status changed
+    if (dto.fullName !== undefined || dto.email !== undefined || dto.isActive !== undefined) {
+      await this.prisma.user.update({
+        where: { id: doctor.userId },
+        data: {
+          ...(dto.fullName !== undefined ? { fullName: dto.fullName.trim() } : {}),
+          ...(dto.email !== undefined ? { email: dto.email.trim().toLowerCase() } : {}),
+          ...(dto.isActive !== undefined ? { status: dto.isActive ? 'active' : 'inactive' } : {}),
+        },
+      }).catch(() => {});
+    }
 
     return this.prisma.doctorProfile.update({
-      where: { id },
+      where: { id: doctor.id },
       data,
       select: {
         id: true,
+        userId: true,
         fullName: true,
         email: true,
         specialty: true,
@@ -286,14 +415,23 @@ export class AdminDoctorController {
   async approveDoctor(@Headers('authorization') auth: string, @Param('id') id: string) {
     verifyAdmin(auth);
 
-    const doctor = await this.prisma.doctorProfile.findUnique({ where: { id } });
+    const cleanId = id.startsWith('doc-') ? id.replace('doc-', '') : id;
+    const doctor = await this.prisma.doctorProfile.findFirst({
+      where: { OR: [{ id }, { id: cleanId }, { userId: id }, { userId: cleanId }] },
+    });
     if (!doctor) throw new NotFoundException('پزشک یافت نشد');
 
+    await this.prisma.user.update({
+      where: { id: doctor.userId },
+      data: { status: 'active' },
+    }).catch(() => {});
+
     return this.prisma.doctorProfile.update({
-      where: { id },
+      where: { id: doctor.id },
       data: { collaborationStatus: 'approved', isActive: true },
       select: {
         id: true,
+        userId: true,
         fullName: true,
         collaborationStatus: true,
         isActive: true,
@@ -306,19 +444,65 @@ export class AdminDoctorController {
   async rejectDoctor(@Headers('authorization') auth: string, @Param('id') id: string) {
     verifyAdmin(auth);
 
-    const doctor = await this.prisma.doctorProfile.findUnique({ where: { id } });
+    const cleanId = id.startsWith('doc-') ? id.replace('doc-', '') : id;
+    const doctor = await this.prisma.doctorProfile.findFirst({
+      where: { OR: [{ id }, { id: cleanId }, { userId: id }, { userId: cleanId }] },
+    });
     if (!doctor) throw new NotFoundException('پزشک یافت نشد');
 
     return this.prisma.doctorProfile.update({
-      where: { id },
+      where: { id: doctor.id },
       data: { collaborationStatus: 'rejected', isActive: false },
       select: {
         id: true,
+        userId: true,
         fullName: true,
         collaborationStatus: true,
         isActive: true,
         updatedAt: true,
       },
     });
+  }
+
+  @Delete(':id')
+  async deleteDoctor(@Headers('authorization') auth: string, @Param('id') id: string) {
+    verifyAdmin(auth);
+
+    const cleanId = id.startsWith('doc-') ? id.replace('doc-', '') : id;
+    const doctor = await this.prisma.doctorProfile.findFirst({
+      where: { OR: [{ id }, { id: cleanId }, { userId: id }, { userId: cleanId }] },
+    });
+    if (!doctor) throw new NotFoundException('پزشک یافت نشد');
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Unassign from teleReportRequests safely without losing the patient requests
+      await tx.teleReportRequest.updateMany({
+        where: { assignedDoctorId: doctor.userId },
+        data: { assignedDoctorId: null, status: 'new' },
+      });
+      // 2. In radiologyReport, disassociate author without deleting the medical reports or records
+      await tx.radiologyReport.updateMany({
+        where: { authorId: doctor.userId },
+        data: { authorId: null },
+      });
+      // 3. Clear routing rules preferred doctor
+      await tx.routingRule.updateMany({
+        where: { preferredDoctorId: doctor.id },
+        data: { preferredDoctorId: null },
+      });
+      // 4. In infoRequest disassociate author
+      await tx.infoRequest.updateMany({
+        where: { authorId: doctor.userId },
+        data: { authorId: null },
+      });
+      // 5. Delete doctor profile
+      await tx.doctorProfile.delete({ where: { id: doctor.id } });
+      // 6. Delete user or deactivate safely
+      await tx.user.delete({ where: { id: doctor.userId } }).catch(async () => {
+        await tx.user.update({ where: { id: doctor.userId }, data: { status: 'inactive' } }).catch(() => {});
+      });
+    });
+
+    return { ok: true, message: 'پزشک رادیولوژیست با موفقیت حذف شد' };
   }
 }

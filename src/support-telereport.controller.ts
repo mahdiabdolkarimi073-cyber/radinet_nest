@@ -117,31 +117,116 @@ export class SupportTelereportController {
   @Patch(':id/assign-doctor')
   async assignDoctor(@Headers('authorization') auth: string, @Param('id') id: string, @Body() dto: AssignDoctorDto) {
     verifySupportToken(auth);
-    const request = await this.prisma.teleReportRequest.findUnique({ where: { id } });
+    const isUuid = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+    const request = await this.prisma.teleReportRequest.findFirst({
+      where: isUuid(id)
+        ? { OR: [{ id }, { requestNumber: id }] }
+        : { requestNumber: id },
+    });
     if (!request) throw new NotFoundException('درخواست تله‌ریپورت یافت نشد');
 
-    const doctor = await this.prisma.doctorProfile.findFirst({
-      where: { OR: [{ id: dto.doctorId }, { userId: dto.doctorId }] },
-    });
-    const doctorUserId = doctor?.userId ?? dto.doctorId;
+    const rawId = String(dto.doctorId || '').trim();
+    const cleanId = rawId.startsWith('doc-') ? rawId.replace('doc-', '') : rawId;
+
+    // Safely query DoctorProfile without crashing on non-UUID strings
+    const profileOr: Prisma.DoctorProfileWhereInput[] = [];
+    if (isUuid(rawId)) profileOr.push({ id: rawId }, { userId: rawId });
+    if (isUuid(cleanId) && cleanId !== rawId) profileOr.push({ id: cleanId }, { userId: cleanId });
+    if (rawId) {
+      profileOr.push(
+        { email: { equals: rawId, mode: 'insensitive' } },
+        { fullName: { equals: rawId, mode: 'insensitive' } }
+      );
+    }
+    if (cleanId && cleanId !== rawId) {
+      profileOr.push(
+        { email: { equals: cleanId, mode: 'insensitive' } },
+        { fullName: { equals: cleanId, mode: 'insensitive' } }
+      );
+    }
+
+    let doctor = profileOr.length > 0
+      ? await this.prisma.doctorProfile.findFirst({
+          where: { OR: profileOr },
+          include: { user: true },
+        })
+      : null;
+
+    if (!doctor) {
+      // Look up in User table for radiologist role
+      const userOr: Prisma.UserWhereInput[] = [];
+      if (isUuid(rawId)) userOr.push({ id: rawId });
+      if (isUuid(cleanId) && cleanId !== rawId) userOr.push({ id: cleanId });
+      if (rawId) {
+        userOr.push(
+          { email: { equals: rawId, mode: 'insensitive' } },
+          { fullName: { equals: rawId, mode: 'insensitive' } }
+        );
+      }
+      if (cleanId && cleanId !== rawId) {
+        userOr.push(
+          { email: { equals: cleanId, mode: 'insensitive' } },
+          { fullName: { equals: cleanId, mode: 'insensitive' } }
+        );
+      }
+
+      const user = userOr.length > 0
+        ? await this.prisma.user.findFirst({
+            where: {
+              OR: userOr,
+              role: { in: ['radiologist', 'doctor', 'RADIOLOGIST', 'DOCTOR'] },
+            },
+          })
+        : null;
+
+      if (user) {
+        doctor = await this.prisma.doctorProfile.findUnique({ where: { userId: user.id } });
+        if (!doctor) {
+          doctor = await this.prisma.doctorProfile.create({
+            data: {
+              userId: user.id,
+              fullName: user.fullName || user.email,
+              email: user.email,
+              specialty: 'متخصص رادیولوژی و تله‌ریپورت',
+              isActive: true,
+              collaborationStatus: 'approved',
+            },
+          });
+        }
+      }
+    }
+
+    if (!doctor) {
+      throw new NotFoundException('پزشک رادیولوژیست مورد نظر در دیتابیس یافت نشد');
+    }
+
+    // Ensure doctor is active and approved for receiving referrals
+    if (!doctor.isActive || doctor.collaborationStatus !== 'approved') {
+      await this.prisma.doctorProfile.update({
+        where: { id: doctor.id },
+        data: { isActive: true, collaborationStatus: 'approved' },
+      });
+    }
+
+    const doctorUserId = doctor.userId;
 
     const existingReport = await this.prisma.radiologyReport.findFirst({
-      where: { requestId: id },
+      where: { requestId: request.id },
     });
 
     const report = existingReport
       ? await this.prisma.radiologyReport.update({
           where: { id: existingReport.id },
           data: { authorId: doctorUserId, status: 'draft' },
-          include: { author: { select: { id: true, fullName: true } } },
+          include: { author: { select: { id: true, fullName: true, email: true } } },
         })
       : await this.prisma.radiologyReport.create({
-          data: { requestId: id, authorId: doctorUserId, status: 'draft', findings: '', conclusion: '' },
-          include: { author: { select: { id: true, fullName: true } } },
+          data: { requestId: request.id, authorId: doctorUserId, status: 'draft', findings: '', conclusion: '' },
+          include: { author: { select: { id: true, fullName: true, email: true } } },
         });
 
     await this.prisma.teleReportRequest.update({
-      where: { id },
+      where: { id: request.id },
       data: { status: 'assigned', assignedDoctorId: doctorUserId },
     });
 
