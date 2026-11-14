@@ -1,0 +1,261 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.InfoRequestController = void 0;
+const common_1 = require("@nestjs/common");
+const class_validator_1 = require("class-validator");
+const jwt = __importStar(require("jsonwebtoken"));
+const prisma_service_1 = require("./prisma.service");
+const JWT_SECRET = process.env.JWT_SECRET ?? 'radinet-dev-secret-change-me';
+function extractUser(auth) {
+    if (!auth?.startsWith('Bearer '))
+        return null;
+    try {
+        const payload = jwt.verify(auth.slice('Bearer '.length), JWT_SECRET);
+        if (!payload.sub)
+            return null;
+        return { id: payload.sub, name: payload.name ?? '', role: payload.role ?? 'user' };
+    }
+    catch {
+        return null;
+    }
+}
+class CreateInfoRequestDto {
+}
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Length)(1, 36),
+    __metadata("design:type", String)
+], CreateInfoRequestDto.prototype, "requestId", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Length)(1, 200),
+    __metadata("design:type", String)
+], CreateInfoRequestDto.prototype, "title", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Length)(1, 5000),
+    __metadata("design:type", String)
+], CreateInfoRequestDto.prototype, "body", void 0);
+class UpdateInfoRequestDto {
+}
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Length)(1, 5000),
+    __metadata("design:type", String)
+], UpdateInfoRequestDto.prototype, "response", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(['open', 'answered', 'closed']),
+    __metadata("design:type", String)
+], UpdateInfoRequestDto.prototype, "status", void 0);
+const statusLabels = {
+    open: 'باز',
+    answered: 'پاسخ داده شده',
+    closed: 'بسته شده',
+};
+let InfoRequestController = class InfoRequestController {
+    constructor(prisma) {
+        this.prisma = prisma;
+    }
+    async listInfoRequests(status, search, pageParam, limitParam, auth) {
+        const user = extractUser(auth);
+        if (!user)
+            throw new common_1.UnauthorizedException('احراز هویت الزامی است');
+        if (user.role !== 'radiologist')
+            throw new common_1.ForbiddenException('دسترسی به پنل پزشک تنها برای رادیولوژیست‌ها مجاز است');
+        const page = Math.max(Number.parseInt(pageParam ?? '1', 10) || 1, 1);
+        const limit = Math.min(Math.max(Number.parseInt(limitParam ?? '8', 10) || 8, 1), 50);
+        const where = { authorId: user.id };
+        if (status && status !== 'all')
+            where.status = status;
+        if (search?.trim()) {
+            const value = search.trim();
+            where.OR = [
+                { title: { contains: value, mode: 'insensitive' } },
+                { body: { contains: value, mode: 'insensitive' } },
+                { request: { requestNumber: { contains: value, mode: 'insensitive' } } },
+                { request: { patientFirstName: { contains: value, mode: 'insensitive' } } },
+                { request: { patientLastName: { contains: value, mode: 'insensitive' } } },
+            ];
+        }
+        const [total, items] = await Promise.all([
+            this.prisma.infoRequest.count({ where }),
+            this.prisma.infoRequest.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip: (page - 1) * limit,
+                take: limit,
+                include: {
+                    request: {
+                        select: {
+                            id: true,
+                            requestNumber: true,
+                            patientFirstName: true,
+                            patientLastName: true,
+                            imagingType: true,
+                            imagingArea: true,
+                        },
+                    },
+                },
+            }),
+        ]);
+        return {
+            items,
+            total,
+            page,
+            limit,
+            pages: Math.max(Math.ceil(total / limit), 1),
+            statusLabels,
+        };
+    }
+    async createInfoRequest(body, auth) {
+        const user = extractUser(auth);
+        if (!user)
+            throw new common_1.UnauthorizedException('احراز هویت الزامی است');
+        if (user.role !== 'radiologist')
+            throw new common_1.ForbiddenException('دسترسی به پنل پزشک تنها برای رادیولوژیست‌ها مجاز است');
+        const request = await this.prisma.teleReportRequest.findUnique({
+            where: { id: body.requestId },
+            select: { id: true },
+        });
+        if (!request)
+            throw new common_1.BadRequestException('درخواست بیمار پیدا نشد');
+        return this.prisma.infoRequest.create({
+            data: {
+                requestId: body.requestId,
+                authorId: user.id,
+                title: body.title,
+                body: body.body,
+                status: 'open',
+            },
+            include: {
+                request: {
+                    select: {
+                        id: true,
+                        requestNumber: true,
+                        patientFirstName: true,
+                        patientLastName: true,
+                        imagingType: true,
+                        imagingArea: true,
+                    },
+                },
+            },
+        });
+    }
+    async updateInfoRequest(id, body, auth) {
+        const user = extractUser(auth);
+        if (!user)
+            throw new common_1.UnauthorizedException('احراز هویت الزامی است');
+        if (user.role !== 'radiologist')
+            throw new common_1.ForbiddenException('دسترسی به پنل پزشک تنها برای رادیولوژیست‌ها مجاز است');
+        const existing = await this.prisma.infoRequest.findUnique({ where: { id } });
+        if (!existing)
+            throw new common_1.BadRequestException('درخواست اطلاعات پیدا نشد');
+        if (existing.authorId !== user.id)
+            throw new common_1.UnauthorizedException('دسترسی مجاز نیست');
+        const data = {};
+        if (body.response !== undefined) {
+            data.response = body.response;
+            data.respondedAt = new Date();
+            if (existing.status === 'open')
+                data.status = 'answered';
+        }
+        if (body.status !== undefined)
+            data.status = body.status;
+        return this.prisma.infoRequest.update({
+            where: { id },
+            data,
+            include: {
+                request: {
+                    select: {
+                        id: true,
+                        requestNumber: true,
+                        patientFirstName: true,
+                        patientLastName: true,
+                        imagingType: true,
+                        imagingArea: true,
+                    },
+                },
+            },
+        });
+    }
+};
+exports.InfoRequestController = InfoRequestController;
+__decorate([
+    (0, common_1.Get)(),
+    __param(0, (0, common_1.Query)('status')),
+    __param(1, (0, common_1.Query)('search')),
+    __param(2, (0, common_1.Query)('page')),
+    __param(3, (0, common_1.Query)('limit')),
+    __param(4, (0, common_1.Headers)('authorization')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String, String, String]),
+    __metadata("design:returntype", Promise)
+], InfoRequestController.prototype, "listInfoRequests", null);
+__decorate([
+    (0, common_1.Post)(),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Headers)('authorization')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [CreateInfoRequestDto, String]),
+    __metadata("design:returntype", Promise)
+], InfoRequestController.prototype, "createInfoRequest", null);
+__decorate([
+    (0, common_1.Patch)(':id'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.Headers)('authorization')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, UpdateInfoRequestDto, String]),
+    __metadata("design:returntype", Promise)
+], InfoRequestController.prototype, "updateInfoRequest", null);
+exports.InfoRequestController = InfoRequestController = __decorate([
+    (0, common_1.Controller)('dashboard/info-requests'),
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+], InfoRequestController);

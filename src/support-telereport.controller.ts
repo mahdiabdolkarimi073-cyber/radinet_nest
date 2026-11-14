@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards, NotFoundException, BadRequestException } from '@nestjs/common';
 import { IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import { SupportExpertGuard, verifySupportToken } from './support-auth';
+import { parseOptionalValidDate } from './tele-report-validation';
 
 class TelereportQueryDto { @IsOptional() @IsString() status?: string; @IsOptional() @IsString() search?: string; }
 class StatusDto { @IsIn(['new', 'pending', 'assigned', 'in_progress', 'coordinating', 'scheduled', 'completed', 'cancelled']) status!: string; }
@@ -189,22 +191,22 @@ export class SupportTelereportController {
     if (!request) throw new NotFoundException('درخواست تله‌ریپورت یافت نشد');
 
     const rawId = String(dto.doctorId || '').trim();
-    const cleanId = rawId.startsWith('doc-') ? rawId.replace('doc-', '') : rawId;
+    const cleanDocId = rawId.startsWith('doc-') ? rawId.replace('doc-', '') : rawId;
 
     // Safely query DoctorProfile without crashing on non-UUID strings
     const profileOr: Prisma.DoctorProfileWhereInput[] = [];
     if (isUuid(rawId)) profileOr.push({ id: rawId }, { userId: rawId });
-    if (isUuid(cleanId) && cleanId !== rawId) profileOr.push({ id: cleanId }, { userId: cleanId });
+    if (isUuid(cleanDocId) && cleanDocId !== rawId) profileOr.push({ id: cleanDocId }, { userId: cleanDocId });
     if (rawId) {
       profileOr.push(
         { email: { equals: rawId, mode: 'insensitive' } },
         { fullName: { equals: rawId, mode: 'insensitive' } }
       );
     }
-    if (cleanId && cleanId !== rawId) {
+    if (cleanDocId && cleanDocId !== rawId) {
       profileOr.push(
-        { email: { equals: cleanId, mode: 'insensitive' } },
-        { fullName: { equals: cleanId, mode: 'insensitive' } }
+        { email: { equals: cleanDocId, mode: 'insensitive' } },
+        { fullName: { equals: cleanDocId, mode: 'insensitive' } }
       );
     }
 
@@ -219,17 +221,17 @@ export class SupportTelereportController {
       // Look up in User table for radiologist role
       const userOr: Prisma.UserWhereInput[] = [];
       if (isUuid(rawId)) userOr.push({ id: rawId });
-      if (isUuid(cleanId) && cleanId !== rawId) userOr.push({ id: cleanId });
+      if (isUuid(cleanDocId) && cleanDocId !== rawId) userOr.push({ id: cleanDocId });
       if (rawId) {
         userOr.push(
           { email: { equals: rawId, mode: 'insensitive' } },
           { fullName: { equals: rawId, mode: 'insensitive' } }
         );
       }
-      if (cleanId && cleanId !== rawId) {
+      if (cleanDocId && cleanDocId !== rawId) {
         userOr.push(
-          { email: { equals: cleanId, mode: 'insensitive' } },
-          { fullName: { equals: cleanId, mode: 'insensitive' } }
+          { email: { equals: cleanDocId, mode: 'insensitive' } },
+          { fullName: { equals: cleanDocId, mode: 'insensitive' } }
         );
       }
 
@@ -243,7 +245,10 @@ export class SupportTelereportController {
         : null;
 
       if (user) {
-        doctor = await this.prisma.doctorProfile.findUnique({ where: { userId: user.id } });
+        doctor = await this.prisma.doctorProfile.findUnique({
+          where: { userId: user.id },
+          include: { user: true },
+        });
         if (!doctor) {
           doctor = await this.prisma.doctorProfile.create({
             data: {
@@ -254,6 +259,7 @@ export class SupportTelereportController {
               isActive: true,
               collaborationStatus: 'approved',
             },
+            include: { user: true },
           });
         }
       }
@@ -369,12 +375,13 @@ export class SupportTelereportController {
         : { OR: [{ requestNumber: cleanId }, { requestNumber: { equals: cleanId, mode: 'insensitive' } }] },
     });
     if (!request) throw new NotFoundException('درخواست تله‌ریپورت یافت نشد');
+    const scheduledDate = parseOptionalValidDate(dto.scheduledAt, 'تاریخ زمان‌بندی');
     return this.prisma.teleReportRequest.update({
       where: { id: request.id },
       data: {
         status: 'coordinating',
         ...(dto.notes !== undefined ? { clinicalHistory: `${request.clinicalHistory}\n[پشتیبانی] ${dto.notes}` } : {}),
-        ...(dto.scheduledAt ? { studyDate: new Date(dto.scheduledAt) } : {}),
+        ...(scheduledDate ? { studyDate: scheduledDate } : {}),
       },
     });
   }

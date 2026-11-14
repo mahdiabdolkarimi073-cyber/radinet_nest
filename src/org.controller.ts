@@ -14,6 +14,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import {
+  Allow,
   IsArray,
   IsBoolean,
   IsEmail,
@@ -39,6 +40,11 @@ import {
 } from './multipart-upload';
 import { PrismaService } from './prisma.service';
 import { verifyAuthToken } from './auth-token';
+import {
+  cleanupUploadedFiles,
+  parseOptionalValidDate,
+  parseValidatedAge,
+} from './tele-report-validation';
 
 // ── DTOs ──
 
@@ -129,10 +135,8 @@ class CreateRequestDto {
   city?: string;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  age?: number;
+  @Allow()
+  age?: number | string;
 
   @IsOptional()
   @IsString()
@@ -150,7 +154,7 @@ class CreateRequestDto {
   imagingArea?: string;
 
   @IsOptional()
-  @IsString()
+  @Allow()
   studyDate?: string;
 
   @IsOptional()
@@ -1062,123 +1066,131 @@ export class OrgController {
     @Body() dto: CreateRequestDto,
     @UploadedMultipartFiles() files: StoredUploadFile[] = [],
   ) {
-    const user = await this.requireOrgUser(auth);
-    const orgId = user.organizationId!;
+    try {
+      const user = await this.requireOrgUser(auth);
+      const orgId = user.organizationId!;
 
-    if (user.role.toLowerCase() === 'org_staff') {
-      const perms = await this.getOrgPermissions(orgId);
-      if (!perms.staffCanSubmit) {
-        throw new ForbiddenException('دسترسی ثبت درخواست برای کارشناسان سازمان غیرفعال است');
+      if (user.role.toLowerCase() === 'org_staff') {
+        const perms = await this.getOrgPermissions(orgId);
+        if (!perms.staffCanSubmit) {
+          throw new ForbiddenException('دسترسی ثبت درخواست برای کارشناسان سازمان غیرفعال است');
+        }
       }
-    }
 
-    // Determine which organization user this request is associated with
-    let targetUserId = user.id;
-    if (dto.submittingUserId && dto.submittingUserId !== user.id) {
-      const subUser = await this.prisma.user.findUnique({
-        where: { id: dto.submittingUserId },
+      // Determine which organization user this request is associated with
+      let targetUserId = user.id;
+      if (dto.submittingUserId && dto.submittingUserId !== user.id) {
+        const subUser = await this.prisma.user.findUnique({
+          where: { id: dto.submittingUserId },
+        });
+        if (!subUser || subUser.organizationId !== orgId) {
+          throw new BadRequestException('کاربر انتخاب‌شده متعلق به این سازمان نیست');
+        }
+        targetUserId = subUser.id;
+      }
+
+      // Parse patient first/last name
+      let firstName = (dto.patientFirstName ?? '').trim();
+      let lastName = (dto.patientLastName ?? '').trim();
+      if (!firstName && dto.patientName) {
+        const nameParts = dto.patientName.trim().split(/\s+/);
+        firstName = nameParts[0] || '';
+        lastName = nameParts.slice(1).join(' ') || '';
+      }
+      if (!firstName) {
+        throw new BadRequestException('نام بیمار الزامی است');
+      }
+
+      const validatedAge = parseValidatedAge(dto.age, { required: false });
+      const validatedStudyDate = parseOptionalValidDate(dto.studyDate, 'تاریخ تصویربرداری');
+
+      const org = await this.prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { city: true, phone: true },
       });
-      if (!subUser || subUser.organizationId !== orgId) {
-        throw new BadRequestException('کاربر انتخاب‌شده متعلق به این سازمان نیست');
-      }
-      targetUserId = subUser.id;
+
+      const priorityLabel =
+        dto.priority === 'emergency'
+          ? 'اورژانسی'
+          : dto.priority === 'urgent'
+            ? 'فوری'
+            : 'عادی';
+
+      const requestNumber = `ORG-${Date.now().toString(36).toUpperCase()}-${randomBytes(2).toString('hex').toUpperCase()}`;
+
+      const clinicalHistoryText = [
+        dto.priority && dto.priority !== 'normal' ? `[اولویت: ${priorityLabel}]` : '',
+        (dto.description ?? '').trim(),
+      ]
+        .filter(Boolean)
+        .join(' — ');
+
+      // Save uploaded attachments metadata if any (files already written to disk by MultipartUploadInterceptor)
+      const attachmentRecords: Array<{
+        originalName: string;
+        storedName: string;
+        mimeType: string;
+        size: number;
+        storagePath: string;
+      }> = files.map((file) => ({
+        originalName: file.originalname,
+        storedName: file.filename,
+        mimeType: file.mimetype || 'application/octet-stream',
+        size: file.size,
+        storagePath: `/uploads/tele-reports/${file.filename}`,
+      }));
+
+      const request = await this.prisma.teleReportRequest.create({
+        data: {
+          requestNumber,
+          userId: targetUserId,
+          country: 'IR',
+          language: 'fa',
+          patientFirstName: firstName,
+          patientLastName: lastName,
+          nationalId: dto.nationalId?.trim() || null,
+          phone: dto.phone?.trim() || org?.phone || '',
+          city: dto.city?.trim() || org?.city || 'تهران',
+          age: validatedAge,
+          gender: dto.gender?.trim() || 'unknown',
+          clinicalHistory: clinicalHistoryText,
+          symptoms: (dto.symptoms ?? '').trim(),
+          imagingType: dto.requestType.trim(),
+          imagingArea: (dto.imagingArea ?? '').trim() || 'عمومی',
+          studyDate: validatedStudyDate,
+          pacsUrl: dto.pacsUrl?.trim() || null,
+          cloudUrl: dto.cloudUrl?.trim() || null,
+          status: 'new',
+          attachments:
+            attachmentRecords.length > 0
+              ? {
+                  create: attachmentRecords,
+                }
+              : undefined,
+        },
+        include: {
+          user: { select: { id: true, fullName: true, email: true } },
+          attachments: true,
+        },
+      });
+
+      await this.prisma.orgRequestStatusLog.create({
+        data: {
+          requestId: request.id,
+          status: 'new',
+          note:
+            targetUserId !== user.id
+              ? `درخواست توسط ${user.fullName} برای کاربر زیرمجموعه (${request.user?.fullName ?? ''}) ثبت شد — اولویت: ${priorityLabel}`
+              : `درخواست تله‌ریپورت ثبت شد — اولویت: ${priorityLabel}`,
+          createdBy: user.id,
+        },
+      });
+
+      return request;
+    } catch (error) {
+      await cleanupUploadedFiles(files);
+      throw error;
     }
-
-    // Parse patient first/last name
-    let firstName = (dto.patientFirstName ?? '').trim();
-    let lastName = (dto.patientLastName ?? '').trim();
-    if (!firstName && dto.patientName) {
-      const nameParts = dto.patientName.trim().split(/\s+/);
-      firstName = nameParts[0] || '';
-      lastName = nameParts.slice(1).join(' ') || '';
-    }
-    if (!firstName) {
-      throw new BadRequestException('نام بیمار الزامی است');
-    }
-
-    const org = await this.prisma.organization.findUnique({
-      where: { id: orgId },
-      select: { city: true, phone: true },
-    });
-
-    const priorityLabel =
-      dto.priority === 'emergency'
-        ? 'اورژانسی'
-        : dto.priority === 'urgent'
-          ? 'فوری'
-          : 'عادی';
-
-    const requestNumber = `ORG-${Date.now().toString(36).toUpperCase()}-${randomBytes(2).toString('hex').toUpperCase()}`;
-
-    const clinicalHistoryText = [
-      dto.priority && dto.priority !== 'normal' ? `[اولویت: ${priorityLabel}]` : '',
-      (dto.description ?? '').trim(),
-    ]
-      .filter(Boolean)
-      .join(' — ');
-
-    // Save uploaded attachments metadata if any (files already written to disk by MultipartUploadInterceptor)
-    const attachmentRecords: Array<{
-      originalName: string;
-      storedName: string;
-      mimeType: string;
-      size: number;
-      storagePath: string;
-    }> = files.map((file) => ({
-      originalName: file.originalname,
-      storedName: file.filename,
-      mimeType: file.mimetype || 'application/octet-stream',
-      size: file.size,
-      storagePath: `/uploads/tele-reports/${file.filename}`,
-    }));
-
-    const request = await this.prisma.teleReportRequest.create({
-      data: {
-        requestNumber,
-        userId: targetUserId,
-        country: 'IR',
-        language: 'fa',
-        patientFirstName: firstName,
-        patientLastName: lastName,
-        nationalId: dto.nationalId?.trim() || null,
-        phone: dto.phone?.trim() || org?.phone || '',
-        city: dto.city?.trim() || org?.city || 'تهران',
-        age: dto.age !== undefined && !Number.isNaN(Number(dto.age)) ? Number(dto.age) : null,
-        gender: dto.gender?.trim() || 'unknown',
-        clinicalHistory: clinicalHistoryText,
-        symptoms: (dto.symptoms ?? '').trim(),
-        imagingType: dto.requestType.trim(),
-        imagingArea: (dto.imagingArea ?? '').trim() || 'عمومی',
-        studyDate: dto.studyDate ? new Date(dto.studyDate) : null,
-        pacsUrl: dto.pacsUrl?.trim() || null,
-        cloudUrl: dto.cloudUrl?.trim() || null,
-        status: 'new',
-        attachments:
-          attachmentRecords.length > 0
-            ? {
-                create: attachmentRecords,
-              }
-            : undefined,
-      },
-      include: {
-        user: { select: { id: true, fullName: true, email: true } },
-        attachments: true,
-      },
-    });
-
-    await this.prisma.orgRequestStatusLog.create({
-      data: {
-        requestId: request.id,
-        status: 'new',
-        note:
-          targetUserId !== user.id
-            ? `درخواست توسط ${user.fullName} برای کاربر زیرمجموعه (${request.user?.fullName ?? ''}) ثبت شد — اولویت: ${priorityLabel}`
-            : `درخواست تله‌ریپورت ثبت شد — اولویت: ${priorityLabel}`,
-        createdBy: user.id,
-      },
-    });
-
-    return request;
   }
 
   @Get('requests/:id')

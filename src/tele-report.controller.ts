@@ -20,6 +20,34 @@ export class TeleReportController {
     return setting?.settingValue ?? {};
   }
 
+  @Get('ai-config')
+  async getAiConfig() {
+    const setting =
+      (await this.prisma.siteSetting.findUnique({ where: { settingKey: 'ai_analysis_global' } })) ??
+      (await this.prisma.siteSetting.findUnique({ where: { settingKey: 'ai_settings' } }));
+
+    const value =
+      setting?.settingValue && typeof setting.settingValue === 'object' && !Array.isArray(setting.settingValue)
+        ? (setting.settingValue as Record<string, unknown>)
+        : {};
+
+    return {
+      aiAnalysisEnabled:
+        typeof value.aiAnalysisEnabled === 'boolean'
+          ? value.aiAnalysisEnabled
+          : typeof value.enabled === 'boolean'
+            ? value.enabled
+            : true,
+      aiPricingEnabled: typeof value.aiPricingEnabled === 'boolean' ? value.aiPricingEnabled : true,
+      suggestedPrice:
+        typeof value.suggestedPrice === 'number' && Number.isFinite(value.suggestedPrice)
+          ? Math.round(value.suggestedPrice)
+          : 950000,
+      currency: typeof value.currency === 'string' && value.currency ? value.currency : 'IRR',
+      updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : new Date().toISOString(),
+    };
+  }
+
   @Put()
   async saveSettings(@Body() body: TeleReportSettingsDto) {
     return this.prisma.siteSetting.upsert({

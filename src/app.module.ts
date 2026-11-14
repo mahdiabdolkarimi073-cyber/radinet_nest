@@ -33,6 +33,8 @@ import { AdminSettingsController } from './admin-settings.controller';
 import { ArticleController } from './article.controller';
 import { AdminArticleController } from './admin-article.controller';
 import { SupportTicketController } from './support-ticket.controller';
+import { SupportFaqController } from './support-faq.controller';
+import { PublicTicketController } from './public-ticket.controller';
 import { SupportChatController } from './support-chat.controller';
 import { SupportChatGateway } from './support-chat.gateway';
 import { SupportTelereportController } from './support-telereport.controller';
@@ -84,6 +86,8 @@ import { AuthLogService } from './auth-log.service';
     AdminCommunicationController,
     AdminSystemLogController,
     SupportTicketController,
+    SupportFaqController,
+    PublicTicketController,
     SupportChatController,
     SupportTelereportController,
     SupportReviewController,

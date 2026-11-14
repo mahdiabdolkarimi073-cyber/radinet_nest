@@ -512,32 +512,39 @@ model User {
 
 model Ticket {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  trackingCode String? @unique @map("tracking_code")
   subject String
   message String @db.Text
   status String @default("open")
   priority String @default("medium")
-  userId String @map("user_id") @db.Uuid
-  assignedTo String? @map("assigned_to") @db.Uuid
   category String @default("general")
+  userId String? @map("user_id") @db.Uuid
+  userName String? @map("user_name")
+  userEmail String? @map("user_email")
+  userPhone String? @map("user_phone")
+  assignedTo String? @map("assigned_to") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
   expert User? @relation("AssignedExpert", fields: [assignedTo], references: [id], onDelete: SetNull)
   replies TicketReply[]
   @@index([status, createdAt])
   @@index([priority])
   @@index([assignedTo])
+  @@index([trackingCode])
   @@map("support_tickets")
 }
 
 model TicketReply {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   ticketId String @map("ticket_id") @db.Uuid
-  authorId String @map("author_id") @db.Uuid
+  authorId String? @map("author_id") @db.Uuid
+  authorName String? @map("author_name")
+  authorRole String @default("user") @map("author_role")
   message String @db.Text
   createdAt DateTime @default(now()) @map("created_at")
   ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
   @@index([ticketId])
   @@index([authorId])
   @@map("support_ticket_replies")
@@ -1136,4 +1143,35 @@ model SystemAuthLog {
   @@index([level, createdAt])
   @@map("system_auth_logs")
 }
+
+// ── Support FAQs & Contact Info ──
+
+model SupportFaq {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  question String
+  answer String @db.Text
+  category String @default("general")
+  displayOrder Int @default(0) @map("display_order")
+  isPublished Boolean @default(true) @map("is_published")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([category, isPublished])
+  @@map("support_faqs")
+}
+
+model SupportContactInfo {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  heroTitle String @default("مرکز پشتیبانی و راهنمایی رادینت") @map("hero_title")
+  heroSubtitle String @default("کارشناسان و متخصصان فنی رادینت در تمامی ساعات در کنار شما هستند.") @map("hero_subtitle")
+  phoneNumber String @default("۰۲۱-۸۸۸۸۱۹۲۰") @map("phone_number")
+  mobileNumber String @default("۰۹۱۲۰۵۴۵۶۷۸") @map("mobile_number")
+  email String @default("support@radinet.ir")
+  workingHours String @default("شنبه تا چهارشنبه ۸:۰۰ الی ۱۷:۰۰") @map("working_hours")
+  emergencyNotice String @default("واحد تله‌ریپورت اورژانس ۲۴/۷ فعال است.") @map("emergency_notice")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("support_contact_info")
+}
+
 
